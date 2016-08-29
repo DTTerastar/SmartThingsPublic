@@ -13,18 +13,21 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  */
+//DEPRECATED - Using the smartsense-multi-sensor.groovy DTH for this device. Users need to be moved before deleting this DTH
+import physicalgraph.zigbee.clusters.iaszone.ZoneStatus
 
  metadata {
- 	definition (name: "SmartSense Open/Closed Accelerometer Sensor", namespace: "smartthings", author: "SmartThings") {
+ 	definition (name: "SmartSense Open/Closed Accelerometer Sensor", namespace: "smartthings", author: "SmartThings", category: "C2") {
  		capability "Battery"
  		capability "Configuration"
  		capability "Contact Sensor"
  		capability "Acceleration Sensor"
  		capability "Refresh"
  		capability "Temperature Measurement"
- 		command "enrollResponse"
- 		fingerprint inClusters: "0000,0001,0003,0402,0500,0020,0B05,FC02", outClusters: "0019", manufacturer: "CentraLite", model: "3320"
-		fingerprint inClusters: "0000,0001,0003,0402,0500,0020,0B05,FC02", outClusters: "0019", manufacturer: "CentraLite", model: "3321"
+		capability "Health Check"
+		capability "Sensor"
+
+		command "enrollResponse"
  	}
 
  	simulator {
@@ -170,40 +173,9 @@ private Map parseCustomMessage(String description) {
 }
 
 private Map parseIasMessage(String description) {
-	List parsedMsg = description.split(' ')
-	String msgCode = parsedMsg[2]
+	ZoneStatus zs = zigbee.parseZoneStatus(description)
 
-	Map resultMap = [:]
-	switch(msgCode) {
-        case '0x0020': // Closed/No Motion/Dry
-        resultMap = getContactResult('closed')
-        break
-
-        case '0x0021': // Open/Motion/Wet
-        resultMap = getContactResult('open')
-        break
-
-        case '0x0022': // Tamper Alarm
-        break
-
-        case '0x0023': // Battery Alarm
-        break
-
-        case '0x0024': // Supervision Report
-        resultMap = getContactResult('closed')
-        break
-
-        case '0x0025': // Restore Report
-        resultMap = getContactResult('open')
-        break
-
-        case '0x0026': // Trouble/Failure
-        break
-
-        case '0x0028': // Test Mode
-        break
-    }
-    return resultMap
+	return zs.isAlarm1Set() ? getContactResult('open') : getContactResult('closed')
 }
 
 def getTemperature(value) {
@@ -225,14 +197,16 @@ def getTemperature(value) {
 
 		def volts = rawValue / 10
 		def descriptionText
-		if (volts > 3.5) {
+        if (rawValue == 0 || rawValue == 255) {}
+		else if (volts > 3.5) {
 			result.descriptionText = "${linkText} battery has too much power (${volts} volts)."
 		}
 		else {
 			def minVolts = 2.1
 			def maxVolts = 3.0
 			def pct = (volts - minVolts) / (maxVolts - minVolts)
-			result.value = Math.min(100, (int) pct * 100)
+			def roundedPct = Math.round(pct * 100)
+			result.value = Math.min(100, roundedPct)
 			result.descriptionText = "${linkText} battery was ${result.value}%"
 		}
 
@@ -298,6 +272,7 @@ def getTemperature(value) {
 	}
 
 def configure() {
+	sendEvent(name: "checkInterval", value: 7200, displayed: false)
 
 	String zigbeeEui = swapEndianHex(device.hub.zigbeeEui)
 	log.debug "Configuring Reporting, IAS CIE, and Bindings."

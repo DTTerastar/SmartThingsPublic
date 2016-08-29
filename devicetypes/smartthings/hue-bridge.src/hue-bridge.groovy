@@ -7,8 +7,13 @@
 metadata {
 	// Automatically generated. Make future change here.
 	definition (name: "Hue Bridge", namespace: "smartthings", author: "SmartThings") {
-		attribute "serialNumber", "string"
 		attribute "networkAddress", "string"
+        // Used to indicate if bridge is reachable or not, i.e. is the bridge connected to the network
+        // Possible values "Online" or "Offline"
+		attribute "status", "string"
+		// Id is the number on the back of the hub, Hue uses last six digits of Mac address
+		// This is also used in the Hue application as ID
+		attribute "idNumber", "string"
 	}
 
 	simulator {
@@ -17,25 +22,23 @@ metadata {
 
 	tiles(scale: 2) {
      	multiAttributeTile(name:"rich-control"){
-			tileAttribute ("device.switch", key: "PRIMARY_CONTROL") {
-	            attributeState "default", label: "Hue Bridge", action: "", icon: "st.Lighting.light99-hue", backgroundColor: "#F3C200"
-			}    
-	        tileAttribute ("serialNumber", key: "SECONDARY_CONTROL") {
-	            attributeState "default", label:'SN: ${currentValue}'
-			}    
-        }    
-		standardTile("icon", "icon", width: 1, height: 1, canChangeIcon: false, inactiveLabel: true, canChangeBackground: false) {
-			state "default", label: "Hue Bridge", action: "", icon: "st.Lighting.light99-hue", backgroundColor: "#FFFFFF"
+			tileAttribute ("device.status", key: "PRIMARY_CONTROL") {
+				attributeState "Offline", label: '${currentValue}', action: "", icon: "st.Lighting.light99-hue", backgroundColor: "#ffffff"
+	            attributeState "Online", label: '${currentValue}', action: "", icon: "st.Lighting.light99-hue", backgroundColor: "#79b821"
+			}
+			}
+		valueTile("doNotRemove", "v", decoration: "flat", height: 2, width: 6, inactiveLabel: false) {
+			state "default", label:'Do not remove'
+        }
+		valueTile("idNumber", "device.idNumber", decoration: "flat", height: 2, width: 6, inactiveLabel: false) {
+			state "default", label:'ID: ${currentValue}'
 		}
-		valueTile("serialNumber", "device.serialNumber", decoration: "flat", height: 1, width: 2, inactiveLabel: false) {
-			state "default", label:'SN: ${currentValue}'
-		}
-		valueTile("networkAddress", "device.networkAddress", decoration: "flat", height: 2, width: 4, inactiveLabel: false) {
-			state "default", label:'${currentValue}', height: 1, width: 2, inactiveLabel: false
+		valueTile("networkAddress", "device.networkAddress", decoration: "flat", height: 2, width: 6, inactiveLabel: false) {
+			state "default", label:'IP: ${currentValue}'
 		}
 
-		main (["icon"])
-		details(["rich-control", "networkAddress"])
+		main (["rich-control"])
+		details(["rich-control", "idNumber", "networkAddress", "doNotRemove"])
 	}
 }
 
@@ -75,6 +78,7 @@ def parse(description) {
 				}
 				else if (contentType?.contains("xml")) {
 					log.debug "HUE BRIDGE ALREADY PRESENT"
+                    parent.hubVerification(device.hub.id, msg.body)
 				}
 			}
 		}

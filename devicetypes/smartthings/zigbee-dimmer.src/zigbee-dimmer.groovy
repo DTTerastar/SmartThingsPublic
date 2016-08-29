@@ -19,6 +19,7 @@ metadata {
         capability "Refresh"
         capability "Switch"
         capability "Switch Level"
+        capability "Health Check"
 
 
         fingerprint profileId: "0104", inClusters: "0000, 0003, 0004, 0005, 0006, 0008"
@@ -39,7 +40,7 @@ metadata {
                 attributeState "level", action:"switch level.setLevel"
             }
         }
-        standardTile("refresh", "device.switch", inactiveLabel: false, decoration: "flat", width: 2, height: 2) {
+        standardTile("refresh", "device.refresh", inactiveLabel: false, decoration: "flat", width: 2, height: 2) {
             state "default", label:"", action:"refresh.refresh", icon:"st.secondary.refresh"
         }
         main "switch"
@@ -51,14 +52,17 @@ metadata {
 def parse(String description) {
     log.debug "description is $description"
 
-    def resultMap = zigbee.getKnownDescription(description)
-    if (resultMap) {
-        log.info resultMap
-        if (resultMap.type == "update") {
-            log.info "$device updates: ${resultMap.value}"
+    def event = zigbee.getEvent(description)
+    if (event) {
+        // Temporary fix for the case when Device is OFFLINE and is connected again
+        if (state.lastActivity == null){
+            state.lastActivity = now()
+            sendEvent(name: "deviceWatch-lastActivity", value: state.lastActivity, description: "Last Activity is on ${new Date((long)state.lastActivity)}", displayed: false, isStateChange: true)
         }
+        state.lastActivity = now()
+        if (event.name=="level" && event.value==0) {}
         else {
-            sendEvent(name: resultMap.type, value: resultMap.value)
+            sendEvent(event)
         }
     }
     else {
@@ -78,6 +82,20 @@ def on() {
 def setLevel(value) {
     zigbee.setLevel(value)
 }
+/**
+ * PING is used by Device-Watch in attempt to reach the Device
+ * */
+def ping() {
+
+    if (state.lastActivity < (now() - (1000 * device.currentValue("checkInterval"))) ){
+        log.info "ping, alive=no, lastActivity=${state.lastActivity}"
+        state.lastActivity = null
+        return zigbee.onOffRefresh()
+    } else {
+        log.info "ping, alive=yes, lastActivity=${state.lastActivity}"
+        sendEvent(name: "deviceWatch-lastActivity", value: state.lastActivity, description: "Last Activity is on ${new Date((long)state.lastActivity)}", displayed: false, isStateChange: true)
+    }
+}
 
 def refresh() {
     zigbee.onOffRefresh() + zigbee.levelRefresh() + zigbee.onOffConfig() + zigbee.levelConfig()
@@ -85,5 +103,7 @@ def refresh() {
 
 def configure() {
     log.debug "Configuring Reporting and Bindings."
+    // Enrolls device to Device-Watch with 3 x Reporting interval 30min
+    sendEvent(name: "checkInterval", value: 1800, displayed: false, data: [protocol: "zigbee"])
     zigbee.onOffConfig() + zigbee.levelConfig() + zigbee.onOffRefresh() + zigbee.levelRefresh()
 }
